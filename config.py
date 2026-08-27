@@ -21,7 +21,7 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 # --- Groq (LLM) ---
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
-GROQ_MODEL_SECONDARY = os.environ.get("GROQ_MODEL_SECONDARY", "llama-3.1-8b-instant")
+GROQ_MODEL_SECONDARY = os.environ.get("GROQ_MODEL_SECONDARY", "openai/gpt-oss-20b")
 
 # --- OKX Orbit (см. okx_orbit_generator.py / okx_draft_publisher.py) ---
 # У OKX Orbit нет публичного API для постинга - бот только ГОТОВИТ

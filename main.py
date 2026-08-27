@@ -14,6 +14,8 @@ import sys
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
+import bybit_byx_generator
+import bybit_draft_publisher
 import config
 import groq_client
 import okx_draft_publisher
@@ -104,20 +106,97 @@ def try_publish_okx_orbit_draft() -> None:
 # bybit_byx_generator.py / bybit_draft_publisher.py.
 
 
+def try_publish_bybit_byx_draft() -> None:
+    """Готовит черновик поста для Bybit ByX и присылает его владельцу в
+    Telegram (см. bybit_draft_publisher.py) - НЕ публикует ничего сам, у
+    Bybit ByX нет API для этого (та же ситуация, что и у OKX Orbit, см.
+    README.md). Выключено по умолчанию (config.BYBIT_BYX_ENABLED) и
+    требует config.BYBIT_BYX_DRAFT_CHAT_ID.
+    """
+    if not config.BYBIT_BYX_ENABLED:
+        return
+    if not bybit_draft_publisher.is_configured():
+        logger.warning("BYBIT_BYX_ENABLED=true, но BYBIT_BYX_DRAFT_CHAT_ID не задан - пропускаю формат")
+        return
+
+    post_type = "bybit_byx"
+    seconds_elapsed = state_store.seconds_since_last_post(post_type)
+    min_seconds = config.BYBIT_BYX_INTERVAL_HOURS * 3600 + state_store.get_jitter_seconds(post_type)
+
+    if seconds_elapsed < min_seconds:
+        return
+    if not state_store.should_retry_now(post_type):
+        return  # недавно был сбой - ждём отступ, не долбим API на каждом тике
+
+    logger.info("Окно черновика (Bybit ByX) открыто - генерирую пост")
+
+    theme = bybit_byx_generator.pick_theme(state_store.get_last_theme(post_type))
+    format_type = bybit_byx_generator.pick_format(state_store.get_last_format(post_type))
+
+    try:
+        result = bybit_byx_generator.generate_bybit_byx_post(theme, format_type)
+    except groq_client.GroqRateLimited as e:
+        backoff_hours = max(e.retry_after_seconds / 3600, 5 / 60)
+        logger.warning("Groq rate limit на черновике Bybit ByX - жду %.1fч перед следующей попыткой", backoff_hours)
+        state_store.set_retry_backoff(post_type, backoff_hours)
+        return
+    except Exception as e:
+        logger.error("Ошибка генерации черновика Bybit ByX: %s", e)
+        state_store.set_retry_backoff(post_type, 1)
+        return
+
+    if result is None:
+        logger.warning("Не удалось получить данные для темы %s (Bybit ByX) - пропускаю до следующего окна", theme)
+        state_store.set_retry_backoff(post_type, 1)
+        return
+
+    post_text, allowed_numbers, _headline_pct, format_type = result
+    ok, reason = bybit_byx_generator.validate_bybit_byx_post_text(post_text, allowed_numbers)
+    if not ok:
+        logger.error("Черновик Bybit ByX не прошёл проверку, доставка отменена: %s", reason)
+        state_store.set_retry_backoff(post_type, 1)
+        return
+
+    chart_path = None
+    try:
+        chart_path = bybit_byx_generator.generate_chart_for_post(theme)
+    except Exception as e:
+        logger.warning("Не удалось сгенерировать график для черновика Bybit ByX: %s - шлю без картинки", e)
+
+    try:
+        delivered = bybit_draft_publisher.send_draft(post_text, format_type, chart_path)
+    except bybit_draft_publisher.DraftDeliveryError as e:
+        logger.error("Ошибка доставки черновика Bybit ByX в Telegram: %s", e)
+        state_store.set_retry_backoff(post_type, 1)
+        return
+
+    state_store.set_last_theme(post_type, theme)
+    state_store.set_last_format(post_type, format_type)
+
+    logger.info("Черновик Bybit ByX доставлен: %s", delivered)
+    state_store.set_last_post_time(post_type)
+    state_store.roll_new_jitter(post_type, config.BYBIT_BYX_JITTER_HOURS * 3600)
+
+
 def tick() -> None:
     try:
         try_publish_okx_orbit_draft()
-        # try_publish_bybit_byx_draft()  # раскомментировать, когда будет готов
     except Exception:
-        logger.exception("Неожиданная ошибка в основном цикле")
+        logger.exception("Неожиданная ошибка в цикле OKX Orbit")
+
+    try:
+        try_publish_bybit_byx_draft()
+    except Exception:
+        logger.exception("Неожиданная ошибка в цикле Bybit ByX")
 
 
 def main() -> None:
     once = "--once" in sys.argv
 
     logger.info(
-        "Бот запущен. OKX Orbit: enabled=%s, interval=%sч",
+        "Бот запущен. OKX Orbit: enabled=%s, interval=%sч | Bybit ByX: enabled=%s, interval=%sч",
         config.OKX_ORBIT_ENABLED, config.OKX_ORBIT_INTERVAL_HOURS,
+        config.BYBIT_BYX_ENABLED, config.BYBIT_BYX_INTERVAL_HOURS,
     )
 
     if once:
