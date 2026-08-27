@@ -75,3 +75,13 @@ def test_calc_theme_stats_returns_none_when_all_tickers_fail(monkeypatch):
     monkeypatch.setattr(market_stats, "fetch_klines", lambda ticker, days=2: [])
 
     assert market_stats.calc_theme_stats("market") is None
+
+
+def test_sol_and_bnb_are_standalone_themes(monkeypatch):
+    monkeypatch.setattr(market_stats, "fetch_klines", lambda ticker, days=2: _fake_klines([100, 108]))
+
+    for theme in ("SOL", "BNB"):
+        stats = market_stats.calc_theme_stats(theme)
+        assert stats is not None
+        assert "single" in stats
+        assert stats["single"]["pct"] == 8.0

@@ -30,6 +30,8 @@ logger = logging.getLogger(__name__)
 THEMES: dict[str, dict] = {
     "BTC": {"label": "$BTC", "tickers": ["BTC"]},
     "ETH": {"label": "$ETH", "tickers": ["ETH"]},
+    "SOL": {"label": "$SOL", "tickers": ["SOL"]},
+    "BNB": {"label": "$BNB", "tickers": ["BNB"]},
     "market": {"label": "крипторынок в целом (по корзине BTC/ETH/SOL/BNB)", "tickers": ["BTC", "ETH", "SOL", "BNB"]},
 }
 

@@ -118,3 +118,25 @@ def get_last_format(post_type: str) -> Optional[str]:
 
 def set_last_format(post_type: str, format_type: str) -> None:
     _set(f"last_format:{post_type}", format_type)
+
+
+# --- Память голоса (см. voice_memory.py) - последние зачины постов (для
+# анти-повтора) и история по темам (для честной преемственности),
+# независимо по каждому post_type, чтобы OKX и Bybit не сверялись друг
+# с другом (это разные площадки, совпадение зачинов между ними не
+# проблема, в отличие от совпадения внутри одной площадки). ---
+
+def get_recent_openers(post_type: str) -> list[str]:
+    return _get(f"recent_openers:{post_type}", [])
+
+
+def set_recent_openers(post_type: str, openers: list[str]) -> None:
+    _set(f"recent_openers:{post_type}", openers)
+
+
+def get_theme_post_history(post_type: str) -> dict:
+    return _get(f"theme_post_history:{post_type}", {})
+
+
+def set_theme_post_history(post_type: str, history: dict) -> None:
+    _set(f"theme_post_history:{post_type}", history)

@@ -27,6 +27,7 @@ from chart_generator import generate_chart_image
 from groq_client import call_groq
 from market_stats import THEMES, calc_theme_stats, pick_theme
 from post_format import DISCLAIMER
+import voice_memory
 
 logger = logging.getLogger(__name__)
 
@@ -90,11 +91,16 @@ def _build_user_prompt(theme: str, stats: dict, task_line: str) -> tuple[str, se
             f"Если упоминаешь период времени в тексте - используй ТОЧНО '48 часов' или "
             f"'2 дня', не пересчитывай и не округляй по-своему (не '24 часа', не 'сутки').\n\n"
             f"{task_line}"
+            f"{voice_memory.anti_repeat_block('bybit_byx')}"
+            f"{voice_memory.continuity_block('bybit_byx', theme, label)}"
         )
         # 48 и 2 разрешены отдельно - промпт сам просит модель писать
         # именно эти числа для периода времени (см. okx_orbit_generator
         # для более подробного объяснения этой же проверки).
         allowed_numbers = {s["pct"], s["amplitude_pct"], round(s["current_price"], 2), 48.0, 2.0}
+        old_pct = voice_memory.continuity_pct("bybit_byx", theme)
+        if old_pct is not None:
+            allowed_numbers.add(old_pct)
         headline_pct = s["pct"]
     else:
         breakdown_lines = "\n".join(
@@ -108,8 +114,13 @@ def _build_user_prompt(theme: str, stats: dict, task_line: str) -> tuple[str, se
             f"Если упоминаешь период времени в тексте - используй ТОЧНО '48 часов' или "
             f"'2 дня', не пересчитывай и не округляй по-своему (не '24 часа', не 'сутки').\n\n"
             f"{task_line}"
+            f"{voice_memory.anti_repeat_block('bybit_byx')}"
+            f"{voice_memory.continuity_block('bybit_byx', theme, label)}"
         )
         allowed_numbers = set(stats["breakdown"].values()) | {avg, 48.0, 2.0}
+        old_pct = voice_memory.continuity_pct("bybit_byx", theme)
+        if old_pct is not None:
+            allowed_numbers.add(old_pct)
         headline_pct = avg
 
     return user_prompt, allowed_numbers, headline_pct

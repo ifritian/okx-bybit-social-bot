@@ -21,6 +21,7 @@ import groq_client
 import okx_draft_publisher
 import okx_orbit_generator
 import state_store
+import voice_memory
 
 logging.basicConfig(
     level=logging.INFO,
@@ -73,7 +74,7 @@ def try_publish_okx_orbit_draft() -> None:
         state_store.set_retry_backoff(post_type, 1)
         return
 
-    post_text, allowed_numbers, _headline_pct, format_type = result
+    post_text, allowed_numbers, headline_pct, format_type = result
     ok, reason = okx_orbit_generator.validate_okx_orbit_post_text(post_text, allowed_numbers)
     if not ok:
         logger.error("Черновик OKX Orbit не прошёл проверку, доставка отменена: %s", reason)
@@ -95,6 +96,7 @@ def try_publish_okx_orbit_draft() -> None:
 
     state_store.set_last_theme(post_type, theme)
     state_store.set_last_format(post_type, format_type)
+    voice_memory.record_post(post_type, post_text, theme, headline_pct)
 
     logger.info("Черновик OKX Orbit доставлен: %s", delivered)
     state_store.set_last_post_time(post_type)
@@ -150,7 +152,7 @@ def try_publish_bybit_byx_draft() -> None:
         state_store.set_retry_backoff(post_type, 1)
         return
 
-    post_text, allowed_numbers, _headline_pct, format_type = result
+    post_text, allowed_numbers, headline_pct, format_type = result
     ok, reason = bybit_byx_generator.validate_bybit_byx_post_text(post_text, allowed_numbers)
     if not ok:
         logger.error("Черновик Bybit ByX не прошёл проверку, доставка отменена: %s", reason)
@@ -172,6 +174,7 @@ def try_publish_bybit_byx_draft() -> None:
 
     state_store.set_last_theme(post_type, theme)
     state_store.set_last_format(post_type, format_type)
+    voice_memory.record_post(post_type, post_text, theme, headline_pct)
 
     logger.info("Черновик Bybit ByX доставлен: %s", delivered)
     state_store.set_last_post_time(post_type)
