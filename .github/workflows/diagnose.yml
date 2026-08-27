@@ -1,0 +1,41 @@
+name: Diagnose futures kill switch
+
+# ТОЛЬКО ручной запуск (кнопка "Run workflow" на вкладке Actions) - не по
+# расписанию и не при push, в отличие от bot.yml. Нужен, чтобы посмотреть
+# на diagnose_kill_switch.py/debug_env_encoding.py с ТЕМИ ЖЕ секретами,
+# что использует основной бот (см. bot.yml), не разбираясь с ключами
+# локально на своей машине - см. обсуждение в чате про UnicodeEncodeError
+# из-за placeholder-значения в локальном .env.
+on:
+  workflow_dispatch: {}
+
+# Явно НЕ даём этому workflow права на запись в репозиторий (в отличие от
+# bot.yml) - это чисто диагностика, коммитить сюда нечего.
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    env:
+      BINANCE_FUTURES_API_KEY: ${{ secrets.BINANCE_FUTURES_API_KEY }}
+      BINANCE_FUTURES_API_SECRET: ${{ secrets.BINANCE_FUTURES_API_SECRET }}
+      BINANCE_SPOT_API_KEY: ${{ secrets.BINANCE_SPOT_API_KEY }}
+      BINANCE_SPOT_API_SECRET: ${{ secrets.BINANCE_SPOT_API_SECRET }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check credential encoding (no secrets printed)
+        run: python debug_env_encoding.py
+
+      - name: Dump recent realized-PnL trade history
+        run: python diagnose_kill_switch.py

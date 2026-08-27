@@ -1,0 +1,69 @@
+name: OKX/Bybit Social Bot
+
+# Отдельный от binance-square-bot репозиторий и workflow: поломка или
+# сбой здесь не может задеть работающий Binance-бот, у них нет общего
+# git push, общего bot_state.db и общего concurrency-лока.
+#
+# Раз в час - этого достаточно, чтобы поймать окно публикации
+# (OKX_ORBIT_INTERVAL_HOURS ~8ч +- OKX_ORBIT_JITTER_HOURS ~2ч), и
+# заметно дешевле по Actions-минутам, чем раз в 10 минут у Binance-бота
+# (там более короткие интервалы у некоторых форматов, здесь не нужно).
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch: {}  # ручной запуск кнопкой "Run workflow"
+  push:
+    branches: [main]
+
+# Нужно явно разрешить workflow коммитить bot_state.db обратно в
+# репозиторий - каждый запуск воркфлоу - новая чистая виртуалка без
+# памяти о предыдущих запусках, единственный способ передать состояние
+# (кулдауны, последняя тема/формат) в следующий запуск.
+permissions:
+  contents: write
+
+# Своя, отдельная от Binance-репозитория группа конкурентности - имена
+# групп конкурентности НЕ пересекаются между репозиториями сами по
+# себе (GitHub Actions concurrency scoped per-repo), но группа названа
+# явно на всякий случай, чтобы не полагаться на это неявно.
+concurrency:
+  group: okx-bybit-social-bot
+  cancel-in-progress: false
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GROQ_MODEL: ${{ secrets.GROQ_MODEL }}
+      GROQ_MODEL_SECONDARY: ${{ secrets.GROQ_MODEL_SECONDARY }}
+      OKX_ORBIT_ENABLED: ${{ secrets.OKX_ORBIT_ENABLED || 'true' }}
+      OKX_ORBIT_DRAFT_CHAT_ID: ${{ secrets.OKX_ORBIT_DRAFT_CHAT_ID }}
+      OKX_ORBIT_INTERVAL_HOURS: ${{ secrets.OKX_ORBIT_INTERVAL_HOURS || '8' }}
+      OKX_ORBIT_JITTER_HOURS: ${{ secrets.OKX_ORBIT_JITTER_HOURS || '2' }}
+      BYBIT_BYX_ENABLED: ${{ secrets.BYBIT_BYX_ENABLED || 'false' }}
+      BYBIT_BYX_DRAFT_CHAT_ID: ${{ secrets.BYBIT_BYX_DRAFT_CHAT_ID }}
+      BYBIT_BYX_INTERVAL_HOURS: ${{ secrets.BYBIT_BYX_INTERVAL_HOURS || '8' }}
+      BYBIT_BYX_JITTER_HOURS: ${{ secrets.BYBIT_BYX_JITTER_HOURS || '2' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run one bot check
+        run: python main.py --once
+
+      - name: Save bot state back to the repository
+        if: always()
+        run: |
+          git config user.name "okx-bybit-social-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add bot_state.db
+          git diff --quiet --cached || git commit -m "Обновление состояния бота [skip ci]"
+          git push

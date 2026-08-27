@@ -1,0 +1,79 @@
+name: Backtest
+
+# ТОЛЬКО вручную (workflow_dispatch) - никакого schedule:. Это
+# исследовательский инструмент (см. docstring backtest.py), не часть
+# продакшен-цикла бота, гонять его каждые 10 минут незачем и дорого по
+# API-запросам к data-api.binance.vision.
+on:
+  workflow_dispatch:
+    inputs:
+      symbols:
+        description: "Через запятую, напр. BTCUSDT,ETHUSDT,SOLUSDT (пусто - использовать 'top' ниже)"
+        required: false
+        default: ""
+      top:
+        description: "Топ-N пар по объёму (используется, только если 'symbols' пусто)"
+        required: false
+        default: "20"
+      days:
+        description: "Глубина истории в днях"
+        required: false
+        default: "14"
+      no_htf:
+        description: "Отключить HTF-подтверждение (для сравнения влияния)"
+        type: boolean
+        required: false
+        default: false
+      min_score:
+        description: "Порог публикации (пусто - взять MIN_SIGNAL_SCORE_TO_PUBLISH из секретов/дефолта)"
+        required: false
+        default: ""
+      use_atr_stops:
+        description: "A2: ATR вместо фикс. % отступа для стопа - прогоните дважды (true/false) на одних и тех же symbols/days для сравнения"
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  run-backtest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run backtest
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.symbols }}" ]; then
+            ARGS="$ARGS --symbols ${{ inputs.symbols }}"
+          else
+            ARGS="$ARGS --top ${{ inputs.top }}"
+          fi
+          ARGS="$ARGS --days ${{ inputs.days }}"
+          if [ "${{ inputs.no_htf }}" = "true" ]; then
+            ARGS="$ARGS --no-htf"
+          fi
+          if [ -n "${{ inputs.min_score }}" ]; then
+            ARGS="$ARGS --min-score ${{ inputs.min_score }}"
+          fi
+          if [ "${{ inputs.use_atr_stops }}" = "true" ]; then
+            ARGS="$ARGS --use-atr-stops"
+          fi
+          echo "python backtest.py $ARGS"
+          python backtest.py $ARGS | tee backtest_report.json
+
+      - name: Upload report as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backtest-report
+          path: backtest_report.json
+          retention-days: 30
