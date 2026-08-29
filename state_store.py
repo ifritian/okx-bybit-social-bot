@@ -140,3 +140,24 @@ def get_theme_post_history(post_type: str) -> dict:
 
 def set_theme_post_history(post_type: str, history: dict) -> None:
     _set(f"theme_post_history:{post_type}", history)
+
+
+# --- Новостной формат (см. news_opinion_generator.py) - время последнего
+# новостного поста (гейт частоты ~раз в 3 дня) и список уже использованных
+# id новостей, отдельно по post_type, чтобы OKX и Bybit могли независимо
+# писать разные мнения на одну и ту же новость. ---
+
+def get_last_news_take_time(post_type: str) -> float:
+    return _get(f"last_news_take_time:{post_type}", 0)
+
+
+def set_last_news_take_time(post_type: str, ts: Optional[float] = None) -> None:
+    _set(f"last_news_take_time:{post_type}", ts if ts is not None else time.time())
+
+
+def get_used_news_post_ids(post_type: str) -> list[int]:
+    return _get(f"used_news_post_ids:{post_type}", [])
+
+
+def set_used_news_post_ids(post_type: str, post_ids: list[int]) -> None:
+    _set(f"used_news_post_ids:{post_type}", post_ids)

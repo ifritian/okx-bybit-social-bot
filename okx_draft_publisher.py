@@ -40,6 +40,7 @@ _CAPTION_LIMIT = 1024
 _FORMAT_LABELS = {
     "market_take": "Разбор рынка",
     "trading_insight": "Трейдинг-инсайт",
+    "news_take": "Мнение по новости",
 }
 
 

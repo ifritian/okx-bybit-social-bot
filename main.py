@@ -18,6 +18,7 @@ import bybit_byx_generator
 import bybit_draft_publisher
 import config
 import groq_client
+import news_opinion_generator
 import okx_draft_publisher
 import okx_orbit_generator
 import state_store
@@ -29,6 +30,45 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(), logging.FileHandler(config.LOG_PATH, encoding="utf-8")],
 )
 logger = logging.getLogger(__name__)
+
+
+def _try_publish_news_draft(post_type: str, send_draft, delivery_error_cls) -> bool:
+    """Общая логика новостного формата (см. news_opinion_generator.py)
+    для обеих бирж - генерирует и доставляет черновик-мнение по свежей
+    новости, если окно частоты открыто (не чаще раза в ~3 дня) и
+    нашлась непрочитанная новость. Делит общее окно публикации с
+    market_take/trading_insight - если сработал новостной формат,
+    обычный market-пост в этом тике уже не генерируется (см. вызов ниже).
+
+    Возвращает True, если тик "потреблён" новостным форматом (успешно
+    доставлен ИЛИ доставка не удалась и уже поставлен retry-backoff) -
+    тогда вызывающий код должен просто выйти, не пытаясь ещё и
+    market-пост сгенерировать в этом же тике. False - новостной формат
+    сейчас недоступен (окно закрыто/новостей нет/не прошло проверку),
+    нужно продолжить обычным путём."""
+    if not news_opinion_generator.is_news_window_open(post_type):
+        return False
+
+    result = news_opinion_generator.generate_news_take(post_type)
+    if result is None:
+        return False
+
+    post_text, source_post_id = result
+    try:
+        delivered = send_draft(post_text, "news_take", None)
+    except delivery_error_cls as e:
+        logger.error("Ошибка доставки новостного черновика (%s): %s", post_type, e)
+        state_store.set_retry_backoff(post_type, 1)
+        return True
+
+    news_opinion_generator.mark_news_post_used(post_type, source_post_id)
+    voice_memory.record_post(f"{post_type}_news", post_text)
+
+    logger.info("Новостной черновик (%s) доставлен: %s", post_type, delivered)
+    state_store.set_last_post_time(post_type)
+    jitter_hours = config.OKX_ORBIT_JITTER_HOURS if post_type == "okx_orbit" else config.BYBIT_BYX_JITTER_HOURS
+    state_store.roll_new_jitter(post_type, jitter_hours * 3600)
+    return True
 
 
 def try_publish_okx_orbit_draft() -> None:
@@ -51,6 +91,9 @@ def try_publish_okx_orbit_draft() -> None:
         return
     if not state_store.should_retry_now(post_type):
         return  # недавно был сбой - ждём отступ, не долбим API на каждом тике
+
+    if config.OKX_NEWS_ENABLED and _try_publish_news_draft(post_type, okx_draft_publisher.send_draft, okx_draft_publisher.DraftDeliveryError):
+        return
 
     logger.info("Окно черновика (OKX Orbit) открыто - генерирую пост")
 
@@ -129,6 +172,9 @@ def try_publish_bybit_byx_draft() -> None:
         return
     if not state_store.should_retry_now(post_type):
         return  # недавно был сбой - ждём отступ, не долбим API на каждом тике
+
+    if config.BYBIT_NEWS_ENABLED and _try_publish_news_draft(post_type, bybit_draft_publisher.send_draft, bybit_draft_publisher.DraftDeliveryError):
+        return
 
     logger.info("Окно черновика (Bybit ByX) открыто - генерирую пост")
 

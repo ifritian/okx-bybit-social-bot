@@ -29,10 +29,13 @@ cliche_filter.py        - фильтр ИИ-штампов в готовом т�
 voice_guidelines.py     - общий стилевой словарь для промптов (копия, без изменений)
 post_format.py          - только DISCLAIMER (урезано - Binance-хэштеги тут не нужны)
 state_store.py          - состояние бота в SQLite (кулдауны/джиттер/ротация), общий для OKX+Bybit
-okx_orbit_generator.py  - генерация текста + графика под OKX Orbit
+okx_orbit_generator.py  - генерация текста + графика под OKX Orbit (market_take/trading_insight)
 okx_draft_publisher.py  - доставка черновика в Telegram (OKX)
-bybit_byx_generator.py  - генерация текста + графика под Bybit ByX
+bybit_byx_generator.py  - генерация текста + графика под Bybit ByX (market_take/trading_insight)
 bybit_draft_publisher.py- доставка черновика в Telegram (Bybit, отдельный chat_id от OKX)
+news_channel_reader.py  - читает публичный Telegram-канал через t.me/s/<канал> (без аккаунта)
+news_opinion_generator.py - формат "мнение по новости" (news_take), общий для OKX и Bybit,
+                           с защитой от дословного копирования источника
 main.py                 - раннер тика (--once для Actions, планировщик для локального запуска)
 ```
 
@@ -54,6 +57,8 @@ main.py                 - раннер тика (--once для Actions, план
    - `OKX_ORBIT_DRAFT_CHAT_ID` - chat_id чата (личка или группа), куда будут падать черновики OKX, получить через `@userinfobot`
    - `BYBIT_BYX_DRAFT_CHAT_ID` - **отдельный** chat_id для черновиков Bybit - не тот же, что у OKX, иначе черновики двух бирж смешаются в одном чате
    - `BYBIT_BYX_ENABLED` = `true` (по умолчанию `false` - выключено)
+   - `OKX_NEWS_ENABLED`, `BYBIT_NEWS_ENABLED` = `true`, если хочешь включить формат "мнение по новости" (см. news_opinion_generator.py) - пару раз в неделю, независимо по каждой бирже
+   - Опционально: `NEWS_SOURCE_CHANNEL` (по умолчанию `forklog`)
    - Опционально: `OKX_ORBIT_ENABLED`, `OKX_ORBIT_INTERVAL_HOURS`, `OKX_ORBIT_JITTER_HOURS`, `BYBIT_BYX_INTERVAL_HOURS`, `BYBIT_BYX_JITTER_HOURS` (если не заданы - используются значения по умолчанию из workflow).
 4. Settings -> Actions -> General -> Workflow permissions -> **Read and write permissions** (нужно, чтобы бот мог коммитить `bot_state.db` обратно).
 5. Actions -> "OKX/Bybit Social Bot" -> Run workflow (первый ручной запуск, дальше сам по расписанию раз в час).

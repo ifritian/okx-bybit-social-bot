@@ -46,6 +46,9 @@ jobs:
       BYBIT_BYX_DRAFT_CHAT_ID: ${{ secrets.BYBIT_BYX_DRAFT_CHAT_ID }}
       BYBIT_BYX_INTERVAL_HOURS: ${{ secrets.BYBIT_BYX_INTERVAL_HOURS || '8' }}
       BYBIT_BYX_JITTER_HOURS: ${{ secrets.BYBIT_BYX_JITTER_HOURS || '2' }}
+      NEWS_SOURCE_CHANNEL: ${{ secrets.NEWS_SOURCE_CHANNEL || 'forklog' }}
+      OKX_NEWS_ENABLED: ${{ secrets.OKX_NEWS_ENABLED || 'false' }}
+      BYBIT_NEWS_ENABLED: ${{ secrets.BYBIT_NEWS_ENABLED || 'false' }}
     steps:
       - uses: actions/checkout@v4
 

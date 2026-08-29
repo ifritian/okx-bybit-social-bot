@@ -20,6 +20,11 @@ okx_draft_publisher.py отправляет готовый текст (и кар
 Реальные числа (% изменения, амплитуда) считаются кодом через
 market_stats.calc_theme_stats - LLM получает готовые цифры и пишет
 вокруг них, чтобы не выдумывать данные.
+
+Третий формат - "news_take" (авторская реакция на новость) - живёт
+ОТДЕЛЬНО в news_opinion_generator.py, не здесь: он общий для OKX и
+Bybit (см. main.py._try_publish_news_draft), поэтому не дублируется в
+этом файле.
 """
 import logging
 from pathlib import Path

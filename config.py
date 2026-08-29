@@ -32,11 +32,27 @@ OKX_ORBIT_DRAFT_CHAT_ID = os.environ.get("OKX_ORBIT_DRAFT_CHAT_ID", "")
 OKX_ORBIT_INTERVAL_HOURS = float(os.environ.get("OKX_ORBIT_INTERVAL_HOURS", "8"))
 OKX_ORBIT_JITTER_HOURS = float(os.environ.get("OKX_ORBIT_JITTER_HOURS", "2"))
 
-# --- Bybit ByX (заготовка - см. README.md, следующий этап) ---
+# --- Bybit ByX ---
 BYBIT_BYX_ENABLED = os.environ.get("BYBIT_BYX_ENABLED", "false").lower() == "true"
 BYBIT_BYX_DRAFT_CHAT_ID = os.environ.get("BYBIT_BYX_DRAFT_CHAT_ID", "")
 BYBIT_BYX_INTERVAL_HOURS = float(os.environ.get("BYBIT_BYX_INTERVAL_HOURS", "8"))
 BYBIT_BYX_JITTER_HOURS = float(os.environ.get("BYBIT_BYX_JITTER_HOURS", "2"))
+
+# --- Новостной формат (news_take) - см. news_channel_reader.py ---
+
+# --- Новостной формат (см. news_channel_reader.py / news_opinion_generator.py) ---
+# Читает публичный канал через t.me/s/<канал> (без токенов/аккаунта -
+# см. README.md), формирует авторское мнение по последней новости.
+# Интервал в часах, но по смыслу это "пару раз в неделю": 84ч (3.5 дня)
+# +- 24ч джиттера. Источник канала общий для обеих бирж, но у каждой
+# свой черновик, свой кулдаун и своя память "что уже разбирал" - см. main.py.
+NEWS_SOURCE_CHANNEL = os.environ.get("NEWS_SOURCE_CHANNEL", "forklog")
+OKX_NEWS_ENABLED = os.environ.get("OKX_NEWS_ENABLED", "false").lower() == "true"
+OKX_NEWS_INTERVAL_HOURS = float(os.environ.get("OKX_NEWS_INTERVAL_HOURS", "84"))
+OKX_NEWS_JITTER_HOURS = float(os.environ.get("OKX_NEWS_JITTER_HOURS", "24"))
+BYBIT_NEWS_ENABLED = os.environ.get("BYBIT_NEWS_ENABLED", "false").lower() == "true"
+BYBIT_NEWS_INTERVAL_HOURS = float(os.environ.get("BYBIT_NEWS_INTERVAL_HOURS", "84"))
+BYBIT_NEWS_JITTER_HOURS = float(os.environ.get("BYBIT_NEWS_JITTER_HOURS", "24"))
 
 DB_PATH = BASE_DIR / "bot_state.db"
 LOG_PATH = BASE_DIR / "bot.log"
