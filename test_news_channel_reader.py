@@ -109,3 +109,30 @@ def test_fetch_recent_posts_sorted_newest_first():
         posts = news_channel_reader.fetch_recent_posts()
 
     assert [p.post_id for p in posts] == [200, 100]
+
+
+def test_fetch_recent_posts_skips_digest_posts():
+    """Реальная структура поста-подборки ForkLog: несколько отдельных
+    ссылок на разные статьи в одном посте - если дать это как "одну
+    новость" LLM, получится бессвязная реакция на 5-10 тем сразу."""
+    digest_html = (
+        '<html><body>'
+        '<div class="tgme_widget_message" data-post="forklog/300">'
+        '<div class="tgme_widget_message_text">'
+        '⭐ <a href="https://forklog.com/news/story-one">Китай и Швеция представили новые планы</a><br>'
+        '🇺🇸 <a href="https://forklog.com/news/story-two">ИИ-бум почти удвоил объем</a><br>'
+        '💸 <a href="https://forklog.com/news/story-three">ETF-притоки поддержали ралли</a><br>'
+        '🤖 <a href="https://forklog.com/exclusive/story-four">Xpeng привлекла 900 млн</a>'
+        '</div></div>'
+        '<div class="tgme_widget_message" data-post="forklog/301">'
+        '<div class="tgme_widget_message_text">'
+        + "Обычная одиночная новость про биткоин без ссылок на другие статьи. " * 3 +
+        '</div></div>'
+        '</body></html>'
+    )
+    with patch("news_channel_reader.requests.get", return_value=FakeResponse(digest_html)):
+        posts = news_channel_reader.fetch_recent_posts()
+
+    post_ids = {p.post_id for p in posts}
+    assert 300 not in post_ids  # дайджест с 4 ссылками на разные статьи - пропущен
+    assert 301 in post_ids  # обычная одиночная новость - осталась

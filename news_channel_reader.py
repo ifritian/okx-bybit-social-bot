@@ -33,6 +33,15 @@ NEWS_CHANNEL = config.NEWS_SOURCE_CHANNEL
 
 _MIN_TEXT_LENGTH = 40  # короче - скорее всего просто ссылка/картинка без сути, нечего пересказывать
 
+# ForkLog (и похожие каналы) периодически публикует посты-дайджесты -
+# подборку из 5-10 разных заголовков без связи друг с другом (см. пример
+# реального поста forklog/49552 в README.md). Если дать такой пост
+# LLM как "новость, на которую нужно высказать мнение" - результат
+# разваливается на бессвязный список ("с одной стороны..., с другой
+# стороны... а ещё..."), т.к. это не одна новость, а десять. Отличаем
+# по количеству отдельных ссылок на статьи в одном посте.
+_DIGEST_LINK_THRESHOLD = 3  # 3+ отдельных ссылки на разные статьи в одном посте - это дайджест, не одна новость
+
 # Строки нижнего колонтитула-навигации, которые ForkLog (и похожие
 # каналы) добавляют почти в каждый пост ("Новости | AI | YouTube") -
 # это не часть новости, вырезаем, чтобы не путать LLM и не засорять
@@ -50,6 +59,17 @@ def _fetch_html(channel: str) -> str:
     resp = requests.get(url, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
     resp.raise_for_status()
     return resp.text
+
+
+def _is_digest_post(text_div) -> bool:
+    """True, если в посте несколько (см. _DIGEST_LINK_THRESHOLD) ссылок
+    на разные статьи - признак поста-подборки, а не одной новости."""
+    article_hrefs = set()
+    for a in text_div.find_all("a", href=True):
+        href = a["href"]
+        if "forklog.com/news" in href or "forklog.com/exclusive" in href:
+            article_hrefs.add(href)
+    return len(article_hrefs) >= _DIGEST_LINK_THRESHOLD
 
 
 def _extract_text(text_div) -> str:
@@ -78,6 +98,9 @@ def _parse_posts(html: str) -> list[NewsPost]:
         text_div = msg.select_one("div.tgme_widget_message_text")
         if text_div is None:
             continue  # пост без текста (только медиа/опрос) - нечего пересказывать
+
+        if _is_digest_post(text_div):
+            continue  # подборка из нескольких новостей, не одна история - см. докстринг _is_digest_post
 
         text = _extract_text(text_div)
         if len(text) < _MIN_TEXT_LENGTH:
