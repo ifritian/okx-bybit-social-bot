@@ -43,12 +43,67 @@ FAKE_HTML = """
 
 
 class FakeResponse:
-    def __init__(self, text, status_code=200):
+    def __init__(self, text="", status_code=200, content=b""):
         self.text = text
         self.status_code = status_code
+        self.content = content
 
     def raise_for_status(self):
         pass
+
+
+ARTICLE_HTML_WITH_IMAGE = """
+<html><head>
+<meta property="og:image" content="https://forklog.com/wp-content/uploads/2026/08/preview.jpg">
+</head><body>Статья</body></html>
+"""
+
+ARTICLE_HTML_WITHOUT_IMAGE = "<html><head><title>Статья</title></head><body>Текст без og:image</body></html>"
+
+
+def test_fetch_article_preview_image_downloads_and_saves(tmp_path, monkeypatch):
+    monkeypatch.setattr(news_channel_reader, "_IMAGES_DIR", tmp_path)
+
+    def fake_get(url, timeout=None, headers=None):
+        if url == "https://forklog.com/news/some-story":
+            return FakeResponse(text=ARTICLE_HTML_WITH_IMAGE)
+        if url == "https://forklog.com/wp-content/uploads/2026/08/preview.jpg":
+            return FakeResponse(content=b"fake-jpeg-bytes")
+        raise AssertionError(f"unexpected url: {url}")
+
+    with patch("news_channel_reader.requests.get", side_effect=fake_get):
+        result = news_channel_reader.fetch_article_preview_image(
+            "https://forklog.com/news/some-story", filename_hint="okx_orbit_777"
+        )
+
+    assert result is not None
+    assert result.exists()
+    assert result.read_bytes() == b"fake-jpeg-bytes"
+
+
+def test_fetch_article_preview_image_returns_none_without_url():
+    assert news_channel_reader.fetch_article_preview_image(None, "hint") is None
+    assert news_channel_reader.fetch_article_preview_image("", "hint") is None
+
+
+def test_fetch_article_preview_image_returns_none_when_no_og_image(tmp_path, monkeypatch):
+    monkeypatch.setattr(news_channel_reader, "_IMAGES_DIR", tmp_path)
+
+    with patch("news_channel_reader.requests.get", return_value=FakeResponse(text=ARTICLE_HTML_WITHOUT_IMAGE)):
+        result = news_channel_reader.fetch_article_preview_image(
+            "https://forklog.com/news/no-image-story", filename_hint="hint"
+        )
+
+    assert result is None
+
+
+def test_fetch_article_preview_image_returns_none_on_network_error():
+    import requests as requests_module
+
+    with patch("news_channel_reader.requests.get", side_effect=requests_module.RequestException("boom")):
+        result = news_channel_reader.fetch_article_preview_image("https://forklog.com/news/x", filename_hint="hint")
+
+    assert result is None
 
 
 def test_fetch_recent_posts_parses_text_and_strips_footer():
@@ -94,6 +149,23 @@ def test_fetch_recent_posts_respects_limit():
         posts = news_channel_reader.fetch_recent_posts(limit=5)
 
     assert len(posts) == 5
+
+
+def test_fetch_recent_posts_extracts_article_url():
+    html = (
+        '<html><body>'
+        '<div class="tgme_widget_message" data-post="forklog/500">'
+        '<div class="tgme_widget_message_text">'
+        + "Крупная биржа объявила о листинге нового токена в этом квартале. " * 3
+        + '<a href="https://forklog.com/news/exchange-lists-new-token">Подробнее</a>'
+        '</div></div>'
+        '</body></html>'
+    )
+    with patch("news_channel_reader.requests.get", return_value=FakeResponse(html)):
+        posts = news_channel_reader.fetch_recent_posts()
+
+    assert len(posts) == 1
+    assert posts[0].article_url == "https://forklog.com/news/exchange-lists-new-token"
 
 
 def test_fetch_recent_posts_sorted_newest_first():

@@ -53,9 +53,9 @@ def _try_publish_news_draft(post_type: str, send_draft, delivery_error_cls) -> b
     if result is None:
         return False
 
-    post_text, source_post_id = result
+    post_text, source_post_id, image_path = result
     try:
-        delivered = send_draft(post_text, "news_take", None)
+        delivered = send_draft(post_text, "news_take", image_path)
     except delivery_error_cls as e:
         logger.error("Ошибка доставки новостного черновика (%s): %s", post_type, e)
         state_store.set_retry_backoff(post_type, 1)

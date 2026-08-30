@@ -20,6 +20,7 @@ tgme_widget_message, tgme_widget_message_text) стабильна уже мно�
 а не пересылать/копировать исходный текст.
 """
 import logging
+from pathlib import Path
 from typing import NamedTuple, Optional
 
 import requests
@@ -30,6 +31,8 @@ import config
 logger = logging.getLogger(__name__)
 
 NEWS_CHANNEL = config.NEWS_SOURCE_CHANNEL
+
+_IMAGES_DIR = Path(__file__).parent / "charts"  # тот же каталог, что и у графиков - уже в .gitignore
 
 _MIN_TEXT_LENGTH = 40  # короче - скорее всего просто ссылка/картинка без сути, нечего пересказывать
 
@@ -52,6 +55,7 @@ _FOOTER_LINK_TEXTS = {"новости", "ai", "youtube", "подробнее", "
 class NewsPost(NamedTuple):
     post_id: int
     text: str
+    article_url: Optional[str] = None
 
 
 def _fetch_html(channel: str) -> str:
@@ -70,6 +74,17 @@ def _is_digest_post(text_div) -> bool:
         if "forklog.com/news" in href or "forklog.com/exclusive" in href:
             article_hrefs.add(href)
     return len(article_hrefs) >= _DIGEST_LINK_THRESHOLD
+
+
+def _find_article_url(text_div) -> Optional[str]:
+    """Первая ссылка на статью (не на общий раздел "Новости" и не на
+    другие соцсети канала) - используется для картинки превью статьи,
+    см. fetch_article_preview_image()."""
+    for a in text_div.find_all("a", href=True):
+        href = a["href"]
+        if "forklog.com/news/" in href or "forklog.com/exclusive/" in href:
+            return href
+    return None
 
 
 def _extract_text(text_div) -> str:
@@ -102,11 +117,12 @@ def _parse_posts(html: str) -> list[NewsPost]:
         if _is_digest_post(text_div):
             continue  # подборка из нескольких новостей, не одна история - см. докстринг _is_digest_post
 
+        article_url = _find_article_url(text_div)  # до _extract_text - там ссылки не трогаем, только текст footer-ссылок
         text = _extract_text(text_div)
         if len(text) < _MIN_TEXT_LENGTH:
             continue
 
-        posts.append(NewsPost(post_id=post_id, text=text))
+        posts.append(NewsPost(post_id=post_id, text=text, article_url=article_url))
 
     return posts
 
@@ -126,3 +142,42 @@ def fetch_recent_posts(limit: int = 10) -> list[NewsPost]:
 
     posts = _parse_posts(html)
     return list(reversed(posts))[:limit]
+
+
+def fetch_article_preview_image(article_url: str, filename_hint: str) -> Optional[Path]:
+    """Скачивает превью-картинку статьи (og:image) - ту же самую, что
+    показал бы сам Telegram/любая соцсеть при вставке этой ссылки как
+    предпросмотр. Не текст статьи, а именно официальная превью-картинка,
+    которую сам сайт указал для этой конкретной статьи через og:image -
+    стандартный, некопирайт-чувствительный способ показать "фото по
+    теме" (то же самое видит любой, кто просто скинет эту ссылку в
+    чат). None, если ссылки нет, og:image не нашёлся, или сеть подвела -
+    отсутствие картинки не должно ронять генерацию поста."""
+    if not article_url:
+        return None
+
+    try:
+        resp = requests.get(article_url, timeout=20, headers={"User-Agent": "Mozilla/5.0"})
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        logger.warning("Не удалось открыть страницу статьи %s: %s", article_url, e)
+        return None
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+    og_image = soup.select_one('meta[property="og:image"]')
+    if og_image is None or not og_image.get("content"):
+        return None
+    image_url = og_image["content"]
+
+    try:
+        img_resp = requests.get(image_url, timeout=20, headers={"User-Agent": "Mozilla/5.0"})
+        img_resp.raise_for_status()
+    except requests.RequestException as e:
+        logger.warning("Не удалось скачать превью-картинку %s: %s", image_url, e)
+        return None
+
+    _IMAGES_DIR.mkdir(exist_ok=True)
+    suffix = ".jpg" if ".png" not in image_url.lower() else ".png"
+    out_path = _IMAGES_DIR / f"news_{filename_hint}{suffix}"
+    out_path.write_bytes(img_resp.content)
+    return out_path

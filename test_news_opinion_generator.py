@@ -5,6 +5,7 @@
 дословно скопирует кусок источника вместо пересказа своими словами).
 """
 import time
+from pathlib import Path
 
 import pytest
 
@@ -120,3 +121,48 @@ def test_generate_news_take_returns_none_without_unread_posts(monkeypatch):
     monkeypatch.setattr(news_channel_reader, "fetch_recent_posts", lambda limit=10: [])
 
     assert news_opinion_generator.generate_news_take(post_type) is None
+
+
+def test_generate_news_take_returns_text_id_and_image(monkeypatch):
+    post_type = "okx_orbit_test_gen_success"
+    fake_post = news_channel_reader.NewsPost(
+        post_id=777, text="Компания объявила о запуске нового продукта " * 5,
+        article_url="https://forklog.com/news/example-story",
+    )
+    monkeypatch.setattr(news_channel_reader, "fetch_recent_posts", lambda limit=10: [fake_post])
+    monkeypatch.setattr(
+        news_opinion_generator, "call_groq",
+        lambda *a, **kw: "Если это реально сработает, конкурентам придётся пересмотреть стратегию в этом сегменте."
+    )
+    monkeypatch.setattr(
+        news_channel_reader, "fetch_article_preview_image",
+        lambda article_url, filename_hint: Path("/tmp/fake_preview.jpg"),
+    )
+
+    result = news_opinion_generator.generate_news_take(post_type)
+
+    assert result is not None
+    text, post_id, image_path = result
+    assert post_id == 777
+    assert post_format.DISCLAIMER in text
+    assert image_path == Path("/tmp/fake_preview.jpg")
+
+
+def test_generate_news_take_works_without_article_url(monkeypatch):
+    """Если у поста нет ссылки на статью (article_url=None) - пост всё
+    равно должен сгенерироваться, просто без картинки."""
+    post_type = "okx_orbit_test_gen_no_url"
+    fake_post = news_channel_reader.NewsPost(
+        post_id=778, text="Ончейн-данные показывают рост активности " * 5, article_url=None,
+    )
+    monkeypatch.setattr(news_channel_reader, "fetch_recent_posts", lambda limit=10: [fake_post])
+    monkeypatch.setattr(
+        news_opinion_generator, "call_groq",
+        lambda *a, **kw: "Рост активности сам по себе ни о чём не говорит без контекста, откуда взялись эти адреса."
+    )
+
+    result = news_opinion_generator.generate_news_take(post_type)
+
+    assert result is not None
+    text, post_id, image_path = result
+    assert image_path is None
