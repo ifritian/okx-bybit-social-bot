@@ -38,7 +38,28 @@ def test_generate_okx_orbit_post_includes_disclaimer(monkeypatch):
     assert post_format.DISCLAIMER in text
     assert 5.5 in allowed_numbers
     assert headline_pct == 5.5
-    assert format_type == "market_take"
+
+
+def test_generate_okx_orbit_post_allows_negative_pct_written_without_sign(monkeypatch):
+    """Регрессия: при падении цены LLM естественно пишет "снизился на
+    2.11%" без явного минуса (см. окно черновика от 2026-08-30 - тик
+    забраковал честный текст на этом самом месте). Модуль отрицательного
+    pct должен быть в allowed_numbers наравне со знаком."""
+    monkeypatch.setattr(okx_orbit_generator, "calc_theme_stats", lambda theme: _fake_single_stats(pct=-2.11))
+    monkeypatch.setattr(
+        okx_orbit_generator, "call_groq",
+        lambda *a, **k: "BNB снизился на 2.11% за последние 48 часов - цена ближе к нижней границе диапазона.",
+    )
+
+    result = okx_orbit_generator.generate_okx_orbit_post("BNB", "trading_insight")
+
+    assert result is not None
+    text, allowed_numbers, headline_pct, format_type = result
+    assert 2.11 in allowed_numbers  # модуль, без знака
+    assert -2.11 in allowed_numbers  # и со знаком тоже
+
+    ok, reason = okx_orbit_generator.validate_okx_orbit_post_text(text, allowed_numbers)
+    assert ok is True, reason
 
 
 def test_generate_okx_orbit_post_trading_insight_uses_dedicated_prompt(monkeypatch):

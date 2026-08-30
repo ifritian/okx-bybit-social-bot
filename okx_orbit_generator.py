@@ -111,6 +111,12 @@ def _build_user_prompt(theme: str, stats: dict, task_line: str) -> tuple[str, se
         # периода времени, так что эти числа - не "выдуманные" в том
         # смысле, который проверка ниже призвана ловить.
         allowed_numbers = {s["pct"], s["amplitude_pct"], round(s["current_price"], 2), 48.0, 2.0}
+        # Если pct отрицательный, LLM естественно пишет "снизился на
+        # 2.11%" без явного минуса (слово "снизился" уже несёт смысл
+        # падения) - валидатор регуляркой не восстанавливает знак из
+        # контекста, поэтому разрешаем и модуль числа отдельно, иначе
+        # честный, корректный текст бракуется на каждом падении рынка.
+        allowed_numbers.add(abs(s["pct"]))
         old_pct = voice_memory.continuity_pct("okx_orbit", theme)
         if old_pct is not None:
             allowed_numbers.add(old_pct)
@@ -133,6 +139,9 @@ def _build_user_prompt(theme: str, stats: dict, task_line: str) -> tuple[str, se
         # См. комментарий в ветке "single" выше - 48/2 разрешены отдельно,
         # промпт сам просит модель писать именно эти числа для периода.
         allowed_numbers = set(stats["breakdown"].values()) | {avg, 48.0, 2.0}
+        # См. комментарий в ветке "single" выше - тот же фикс для
+        # отрицательных значений корзины и среднего.
+        allowed_numbers |= {abs(v) for v in stats["breakdown"].values()} | {abs(avg)}
         old_pct = voice_memory.continuity_pct("okx_orbit", theme)
         if old_pct is not None:
             allowed_numbers.add(old_pct)

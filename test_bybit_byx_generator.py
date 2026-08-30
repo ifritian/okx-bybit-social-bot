@@ -41,6 +41,27 @@ def test_generate_bybit_byx_post_includes_disclaimer(monkeypatch):
     assert format_type == "market_take"
 
 
+def test_generate_bybit_byx_post_allows_negative_pct_written_without_sign(monkeypatch):
+    """Регрессия: та же логика, что и в okx_orbit_generator - см.
+    комментарий там. LLM пишет "ETH снизился на 2.12%" без минуса,
+    валидатор не должен это бpaковать."""
+    monkeypatch.setattr(bybit_byx_generator, "calc_theme_stats", lambda theme: _fake_single_stats(pct=-2.12))
+    monkeypatch.setattr(
+        bybit_byx_generator, "call_groq",
+        lambda *a, **k: "ETH снизился на 2.12% за последние 48 часов - текущая цена $65000.00 ближе к нижней границе.",
+    )
+
+    result = bybit_byx_generator.generate_bybit_byx_post("ETH", "trading_insight")
+
+    assert result is not None
+    text, allowed_numbers, headline_pct, format_type = result
+    assert 2.12 in allowed_numbers
+    assert -2.12 in allowed_numbers
+
+    ok, reason = bybit_byx_generator.validate_bybit_byx_post_text(text, allowed_numbers)
+    assert ok is True, reason
+
+
 def test_generate_bybit_byx_post_trading_insight_uses_dedicated_prompt(monkeypatch):
     monkeypatch.setattr(bybit_byx_generator, "calc_theme_stats", lambda theme: _fake_single_stats())
     captured_system_prompts = []

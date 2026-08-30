@@ -98,6 +98,10 @@ def _build_user_prompt(theme: str, stats: dict, task_line: str) -> tuple[str, se
         # именно эти числа для периода времени (см. okx_orbit_generator
         # для более подробного объяснения этой же проверки).
         allowed_numbers = {s["pct"], s["amplitude_pct"], round(s["current_price"], 2), 48.0, 2.0}
+        # Если pct отрицательный, LLM естественно пишет "снизился на
+        # 2.11%" без явного минуса - см. подробный комментарий в
+        # okx_orbit_generator.py, тот же фикс здесь.
+        allowed_numbers.add(abs(s["pct"]))
         old_pct = voice_memory.continuity_pct("bybit_byx", theme)
         if old_pct is not None:
             allowed_numbers.add(old_pct)
@@ -118,6 +122,7 @@ def _build_user_prompt(theme: str, stats: dict, task_line: str) -> tuple[str, se
             f"{voice_memory.continuity_block('bybit_byx', theme, label)}"
         )
         allowed_numbers = set(stats["breakdown"].values()) | {avg, 48.0, 2.0}
+        allowed_numbers |= {abs(v) for v in stats["breakdown"].values()} | {abs(avg)}
         old_pct = voice_memory.continuity_pct("bybit_byx", theme)
         if old_pct is not None:
             allowed_numbers.add(old_pct)
